@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upwork Auto Applier - Backend</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .status-card {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid #444;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .status-initializing { background: #ffa500; }
+        .status-waiting_for_login { background: #ff6b6b; }
+        .status-processing { background: #4ecdc4; }
+        .status-completed { background: #45b7d1; }
+        .status-error { background: #ff4757; }
+        
+        .browser-frame {
+            background: #1a1a1a;
+            border: 2px solid #444;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .browser-frame h3 {
+            margin-bottom: 15px;
+            color: #4ecdc4;
+        }
+        
+        .browser-link {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 25px;
+            font-weight: bold;
+            transition: transform 0.3s ease;
+        }
+        
+        .browser-link:hover {
+            transform: translateY(-2px);
+        }
+        
+        .instructions {
+            background: #2a2a2a;
+            border-left: 4px solid #4ecdc4;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 0 10px 10px 0;
+        }
+        
+        .instructions h3 {
+            color: #4ecdc4;
+            margin-bottom: 15px;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 10px;
+        }
+        
+        .job-progress {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .job-progress h3 {
+            margin-bottom: 15px;
+            color: #4ecdc4;
+        }
+        
+        .progress-bar {
+            background: #444;
+            border-radius: 10px;
+            height: 20px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            background: linear-gradient(90deg, #4ecdc4, #45b7d1);
+            height: 100%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+        
+        .results {
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .results h3 {
+            margin-bottom: 15px;
+            color: #4ecdc4;
+        }
+        
+        .result-item {
+            background: #1a1a1a;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #444;
+        }
+        
+        .result-submitted { border-left-color: #4ecdc4; }
+        .result-skipped { border-left-color: #ffa500; }
+        .result-failed { border-left-color: #ff4757; }
+        
+        .error {
+            background: #ff4757;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            border: 4px solid #444;
+            border-top: 4px solid #4ecdc4;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Upwork Auto Applier</h1>
+            <p>Interactive Browser Backend</p>
+        </div>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Loading session information...</p>
+        </div>
+        
+        <div id="content" class="hidden">
+            <div class="status-card">
+                <h3>
+                    <span id="statusIndicator" class="status-indicator"></span>
+                    Session Status: <span id="sessionStatus">Unknown</span>
+                </h3>
+                <p>Session ID: <code id="sessionId">-</code></p>
+                <p>Created: <span id="createdAt">-</span></p>
+                <p>Last Activity: <span id="lastActivity">-</span></p>
+            </div>
+            
+            <div class="browser-frame">
+                <h3>🌐 Interactive Browser</h3>
+                <p>Click the button below to open the browser window where you can log into Upwork and handle any challenges.</p>
+                <a id="browserLink" href="#" class="browser-link" target="_blank">
+                    Open Browser Window
+                </a>
+            </div>
+            
+            <div class="instructions">
+                <h3>📋 Instructions</h3>
+                <ol>
+                    <li>Click "Open Browser Window" above</li>
+                    <li>Log into your Upwork account</li>
+                    <li>Handle any Cloudflare or security challenges</li>
+                    <li>Return to this page to monitor progress</li>
+                    <li>The system will automatically process your job applications</li>
+                </ol>
+            </div>
+            
+            <div class="job-progress">
+                <h3>📊 Job Progress</h3>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                </div>
+                <p>Processing job <span id="currentJob">0</span> of <span id="totalJobs">0</span></p>
+            </div>
+            
+            <div class="results">
+                <h3>📈 Results</h3>
+                <div id="resultsList">
+                    <p>No results yet...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="error" class="error hidden">
+            <h3>❌ Error</h3>
+            <p id="errorMessage"></p>
+        </div>
+    </div>
+
+    <script>
+        // Get session ID from URL parameters
+        const urlParams = new Date URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session');
+        
+        if (!sessionId) {
+            showError('No session ID provided');
+            return;
+        }
+        
+        // WebSocket connection for real-time updates
+        let ws;
+        let updateInterval;
+        
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:8080');
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                ws.send(JSON.stringify({ type: 'subscribe', sessionId }));
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                updateUI(data);
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected, reconnecting...');
+                setTimeout(connectWebSocket, 3000);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        }
+        
+        function showError(message) {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.remove('hidden');
+            document.getElementById('errorMessage').textContent = message;
+        }
+        
+        function updateUI(data) {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('content').classList.remove('hidden');
+            
+            // Update status
+            document.getElementById('sessionStatus').textContent = data.status || 'Unknown';
+            document.getElementById('sessionId').textContent = data.sessionId || sessionId;
+            document.getElementById('createdAt').textContent = data.createdAt ? new Date(data.createdAt).toLocaleString() : '-';
+            document.getElementById('lastActivity').textContent = data.lastActivity ? new Date(data.lastActivity).toLocaleString() : '-';
+            
+            // Update status indicator
+            const statusIndicator = document.getElementById('statusIndicator');
+            statusIndicator.className = 'status-indicator';
+            statusIndicator.classList.add(`status-${data.status || 'unknown'}`);
+            
+            // Update browser link
+            const browserLink = document.getElementById('browserLink');
+            browserLink.href = `/browser/${sessionId}`;
+            
+            // Update progress
+            const totalJobs = data.jobsCount || 0;
+            const currentJob = data.currentJob || 0;
+            const progress = totalJobs > 0 ? (currentJob / totalJobs) * 100 : 0;
+            
+            document.getElementById('progressFill').style.width = `${progress}%`;
+            document.getElementById('currentJob').textContent = currentJob;
+            document.getElementById('totalJobs').textContent = totalJobs;
+            
+            // Update results
+            updateResults(data.results || []);
+        }
+        
+        function updateResults(results) {
+            const resultsList = document.getElementById('resultsList');
+            
+            if (results.length === 0) {
+                resultsList.innerHTML = '<p>No results yet...</p>';
+                return;
+            }
+            
+            resultsList.innerHTML = results.map(result => `
+                <div class="result-item result-${result.status}">
+                    <strong>Job ${result.jobNumber}:</strong> ${result.status}
+                    ${result.reason ? ` - ${result.reason}` : ''}
+                    ${result.error ? ` - Error: ${result.error}` : ''}
+                    <br>
+                    <small>${result.jobUrl}</small>
+                </div>
+            `).join('');
+        }
+        
+        function fetchSessionData() {
+            fetch(`/session/${sessionId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showError(data.error);
+                    } else {
+                        updateUI(data);
+                    }
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    showError('Failed to fetch session data');
+                });
+        }
+        
+        // Initialize
+        connectWebSocket();
+        fetchSessionData();
+        
+        // Poll for updates every 5 seconds as fallback
+        updateInterval = setInterval(fetchSessionData, 5000);
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (ws) ws.close();
+            if (updateInterval) clearInterval(updateInterval);
+        });
+    </script>
+</body>
+</html>

@@ -5,36 +5,37 @@ This is the backend server for the Upwork Auto Applier. Deploy this to Railway, 
 ## 🚀 Current Status
 
 ✅ **API Ready** - Backend accepts job requests and creates sessions
-✅ **Browser Integration** - Full Puppeteer automation with Docker
+✅ **Browser Integration** - Full Puppeteer automation optimized for Railway Pro
 ✅ **Session Management** - Tracks jobs and results
-✅ **Deployment Ready** - Dockerized for Render free tier
+✅ **Deployment Ready** - Optimized for Railway Pro (no Docker needed)
 
 ## Quick Deploy
 
-### Render (Recommended - Free Tier)
-1. Connect this repository to Render
-2. Select "Docker" as the runtime (auto-detected)
-3. Set environment variables:
-   - `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true`
-   - `PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable`
-4. Deploy automatically
+### Railway Pro (Recommended - $5/month)
+1. Sign up for [Railway Pro](https://railway.app/pricing)
+2. Connect this repository to Railway
+3. Deploy automatically (no Docker needed)
+4. Set environment variables (optional):
+   - `NODE_ENV=production`
+   - `SESSION_SECRET=your-secret-key`
 
-### Railway
+### Railway Free Tier
 1. Connect this repository to Railway
-2. Deploy automatically (Docker support)
+2. Deploy automatically
+3. Note: May have limitations with Puppeteer
 
 ## Environment Variables
 
-Set these in your hosting platform:
+Set these in your hosting platform (optional for Railway Pro):
 
 ```env
 NODE_ENV=production
-PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 SESSION_SECRET=your-super-secret-key-here
 ALLOWED_ORIGINS=https://console.apify.com,https://apify.com
 PORT=3000
 ```
+
+**Note**: Railway Pro handles Puppeteer automatically - no special environment variables needed!
 
 ## API Endpoints
 
@@ -56,7 +57,7 @@ The actor connects to this backend to get a browser URL for users to interact wi
 
 ## How It Works
 
-1. **Docker Base Image** - Uses Puppeteer's official Docker image with pre-installed Chrome
+1. **Railway Pro Runtime** - Optimized Node.js environment with Puppeteer support
 2. **Browser Automation** - Full Puppeteer support for Upwork interaction
 3. **Session Management** - Tracks browser sessions and job processing
 4. **API Integration** - Connects to Apify actor for job data
@@ -67,4 +68,5 @@ The actor connects to this backend to get a browser URL for users to interact wi
 - ✅ **Upwork Integration** - Job application processing
 - ✅ **Session Persistence** - Keep browser alive between batches
 - ✅ **Error Handling** - Robust error management
-- ✅ **Free Tier Compatible** - Works on Render's free plan
+- ✅ **Railway Pro Optimized** - Always-on, reliable hosting
+- ✅ **No Docker Complexity** - Simple Node.js deployment

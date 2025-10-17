@@ -43,7 +43,7 @@ class BrowserSession {
       console.log(`[${this.sessionId}] Launching browser...`);
       
       const launchOptions = {
-        headless: process.env.NODE_ENV === 'production' ? 'new' : false,
+        headless: 'new', // Always headless on Railway
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -52,14 +52,11 @@ class BrowserSession {
           '--no-first-run',
           '--no-zygote',
           '--single-process',
-          '--disable-gpu'
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor'
         ]
       };
-
-      // Use custom executable path in production (Docker)
-      if (process.env.NODE_ENV === 'production' && process.env.PUPPETEER_EXECUTABLE_PATH) {
-        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-      }
 
       this.browser = await puppeteer.launch(launchOptions);
       this.page = await this.browser.newPage();

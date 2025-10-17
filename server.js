@@ -11,7 +11,21 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'", "https:", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'self'"]
+    }
+  }
+}));
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
   credentials: true
@@ -398,6 +412,7 @@ app.get('/browser/:sessionId', (req, res) => {
           <h3>🌐 Interactive Browser</h3>
           <p>Click the button below to open the browser window where you can log into Upwork and handle any challenges.</p>
           <button class="browser-btn" onclick="openBrowser()">Open Browser Window</button>
+          <div id="status-message" style="margin-top: 15px;"></div>
         </div>
         
         <div class="instructions">
@@ -428,15 +443,45 @@ app.get('/browser/:sessionId', (req, res) => {
         
         <script>
           function openBrowser() {
-            // For now, just redirect to Upwork - in a real implementation, 
-            // this would open a new window with the actual browser session
-            window.open('https://www.upwork.com', '_blank');
+            // Open Upwork in a new tab
+            const upworkWindow = window.open('https://www.upwork.com', '_blank');
+            
+            if (upworkWindow) {
+              // Show success message
+              document.getElementById('status-message').innerHTML = 
+                '<p style="color: #4CAF50;">✅ Browser window opened! Please log into Upwork in the new tab.</p>';
+              
+              // Start monitoring for login
+              startLoginMonitoring();
+            } else {
+              // Show error if popup was blocked
+              document.getElementById('status-message').innerHTML = 
+                '<p style="color: #ff6b6b;">❌ Popup blocked! Please allow popups and try again.</p>';
+            }
           }
           
-          // Auto-refresh every 5 seconds
+          function startLoginMonitoring() {
+            // Check login status every 10 seconds
+            const checkInterval = setInterval(async () => {
+              try {
+                const response = await fetch('/session/${sessionId}');
+                const data = await response.json();
+                
+                if (data.isLoggedIn) {
+                  document.getElementById('status-message').innerHTML = 
+                    '<p style="color: #4CAF50;">✅ Logged in! Processing jobs...</p>';
+                  clearInterval(checkInterval);
+                }
+              } catch (error) {
+                console.log('Checking login status...');
+              }
+            }, 10000);
+          }
+          
+          // Auto-refresh page every 30 seconds to show updated results
           setInterval(() => {
             location.reload();
-          }, 5000);
+          }, 30000);
         </script>
       </body>
     </html>

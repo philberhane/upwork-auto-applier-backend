@@ -565,5 +565,6 @@ process.on('SIGINT', async () => {
 app.listen(PORT, () => {
   console.log(`Upwork Backend Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log('Puppeteer enabled with Docker support');
+  console.log('Puppeteer enabled with Railway Pro support');
+  console.log('CSP updated to allow inline scripts');
 });

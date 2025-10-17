@@ -461,7 +461,8 @@ app.get('/browser/:sessionId', (req, res) => {
             // Check login status every 10 seconds
             const checkInterval = setInterval(async () => {
               try {
-                const response = await fetch('/session/${sessionId}');
+                const sessionId = '${sessionId}';
+                const response = await fetch('/session/' + sessionId);
                 const data = await response.json();
                 
                 if (data.isLoggedIn) {

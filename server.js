@@ -294,6 +294,155 @@ app.get('/session/:sessionId/results', (req, res) => {
   });
 });
 
+// Browser interface route
+app.get('/browser/:sessionId', (req, res) => {
+  const sessionId = req.params.sessionId;
+  const session = sessions.get(sessionId);
+  
+  if (!session) {
+    return res.status(404).send(`
+      <html>
+        <head>
+          <title>Session Not Found</title>
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #1a1a1a; color: white; }
+            .error { color: #ff6b6b; }
+          </style>
+        </head>
+        <body>
+          <h1 class="error">Session Not Found</h1>
+          <p>Session ID: ${sessionId}</p>
+          <p>This session may have expired or doesn't exist.</p>
+        </body>
+      </html>
+    `);
+  }
+  
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Upwork Auto Applier - Browser Session</title>
+        <style>
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background: #1a1a1a; 
+            color: white; 
+          }
+          .header { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            padding: 20px; 
+            border-radius: 10px; 
+            margin-bottom: 20px; 
+            text-align: center; 
+          }
+          .status { 
+            background: #2d2d2d; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-bottom: 20px; 
+          }
+          .browser-section { 
+            background: #2d2d2d; 
+            padding: 20px; 
+            border-radius: 8px; 
+            text-align: center; 
+          }
+          .browser-btn { 
+            background: #4CAF50; 
+            color: white; 
+            padding: 15px 30px; 
+            border: none; 
+            border-radius: 5px; 
+            font-size: 16px; 
+            cursor: pointer; 
+            margin: 10px; 
+          }
+          .browser-btn:hover { background: #45a049; }
+          .instructions { 
+            background: #2d2d2d; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-top: 20px; 
+          }
+          .progress { 
+            background: #2d2d2d; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-top: 20px; 
+          }
+          .results { 
+            background: #2d2d2d; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin-top: 20px; 
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🚀 Upwork Auto Applier</h1>
+          <p>Interactive Browser Backend</p>
+        </div>
+        
+        <div class="status">
+          <h3>📊 Session Status: ${session.status}</h3>
+          <p><strong>Session ID:</strong> <code>${sessionId}</code></p>
+          <p><strong>Created:</strong> ${session.createdAt.toISOString()}</p>
+          <p><strong>Last Activity:</strong> ${session.lastActivity.toISOString()}</p>
+        </div>
+        
+        <div class="browser-section">
+          <h3>🌐 Interactive Browser</h3>
+          <p>Click the button below to open the browser window where you can log into Upwork and handle any challenges.</p>
+          <button class="browser-btn" onclick="openBrowser()">Open Browser Window</button>
+        </div>
+        
+        <div class="instructions">
+          <h3>📋 Instructions</h3>
+          <ol>
+            <li>Click "Open Browser Window" above</li>
+            <li>Log into your Upwork account</li>
+            <li>Handle any Cloudflare or security challenges</li>
+            <li>Return to this page to monitor progress</li>
+            <li>The system will automatically process your job applications</li>
+          </ol>
+        </div>
+        
+        <div class="progress">
+          <h3>📊 Job Progress</h3>
+          <p>Processing job ${session.results.length} of ${session.jobs.length}</p>
+        </div>
+        
+        <div class="results">
+          <h3>📈 Results</h3>
+          <div id="results">
+            ${session.results.length > 0 ? 
+              session.results.map(r => `<p>Job ${r.jobNumber}: ${r.status} - ${r.message}</p>`).join('') : 
+              '<p>No results yet...</p>'
+            }
+          </div>
+        </div>
+        
+        <script>
+          function openBrowser() {
+            // For now, just redirect to Upwork - in a real implementation, 
+            // this would open a new window with the actual browser session
+            window.open('https://www.upwork.com', '_blank');
+          }
+          
+          // Auto-refresh every 5 seconds
+          setInterval(() => {
+            location.reload();
+          }, 5000);
+        </script>
+      </body>
+    </html>
+  `);
+});
+
 app.post('/session/:sessionId/keep-alive', (req, res) => {
   const sessionId = req.params.sessionId;
   const session = sessions.get(sessionId);

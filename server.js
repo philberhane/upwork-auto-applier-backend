@@ -16,6 +16,7 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'"],
@@ -411,7 +412,7 @@ app.get('/browser/:sessionId', (req, res) => {
         <div class="browser-section">
           <h3>🌐 Interactive Browser</h3>
           <p>Click the button below to open the browser window where you can log into Upwork and handle any challenges.</p>
-          <button class="browser-btn" onclick="openBrowser()">Open Browser Window</button>
+          <button class="browser-btn" id="open-browser-btn">Open Browser Window</button>
           <div id="status-message" style="margin-top: 15px;"></div>
         </div>
         
@@ -442,6 +443,14 @@ app.get('/browser/:sessionId', (req, res) => {
         </div>
         
         <script>
+          // Wait for DOM to load
+          document.addEventListener('DOMContentLoaded', function() {
+            const openBrowserBtn = document.getElementById('open-browser-btn');
+            if (openBrowserBtn) {
+              openBrowserBtn.addEventListener('click', openBrowser);
+            }
+          });
+          
           function openBrowser() {
             // Open Upwork in a new tab
             const upworkWindow = window.open('https://www.upwork.com', '_blank');

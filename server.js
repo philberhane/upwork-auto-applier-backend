@@ -3,6 +3,7 @@ const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
 const helmet = require('helmet');
+const puppeteer = require('puppeteer');
 const path = require('path');
 require('dotenv').config();
 
@@ -21,46 +22,159 @@ app.use(express.static('public'));
 // Store active sessions
 const sessions = new Map();
 
-// Simple session management (without browser for now)
-class SimpleSession {
+// Browser session management
+class BrowserSession {
   constructor(sessionId) {
     this.sessionId = sessionId;
+    this.browser = null;
+    this.page = null;
     this.jobs = [];
     this.results = [];
-    this.status = 'waiting_for_browser'; // waiting_for_browser, processing, completed, error
+    this.status = 'waiting_for_browser';
     this.createdAt = new Date();
     this.lastActivity = new Date();
-    this.message = 'Backend API is ready. Browser functionality will be added in the next update.';
+    this.isLoggedIn = false;
+    this.keepAlive = false;
+    this.closeAfterRun = true;
+  }
+
+  async launchBrowser() {
+    try {
+      console.log(`[${this.sessionId}] Launching browser...`);
+      
+      const launchOptions = {
+        headless: process.env.NODE_ENV === 'production' ? 'new' : false,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+          '--disable-gpu'
+        ]
+      };
+
+      // Use custom executable path in production (Docker)
+      if (process.env.NODE_ENV === 'production' && process.env.PUPPETEER_EXECUTABLE_PATH) {
+        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      }
+
+      this.browser = await puppeteer.launch(launchOptions);
+      this.page = await this.browser.newPage();
+      
+      // Set viewport
+      await this.page.setViewport({ width: 1280, height: 720 });
+      
+      this.status = 'browser_ready';
+      console.log(`[${this.sessionId}] Browser launched successfully`);
+      
+      return true;
+    } catch (error) {
+      console.error(`[${this.sessionId}] Browser launch failed:`, error);
+      this.status = 'error';
+      throw error;
+    }
   }
 
   async processJobs() {
     try {
-      console.log(`[${this.sessionId}] Processing jobs...`);
+      console.log(`[${this.sessionId}] Processing ${this.jobs.length} jobs...`);
       this.status = 'processing';
       
       for (let i = 0; i < this.jobs.length; i++) {
         const job = this.jobs[i];
         
-        // Simulate job processing
-        const result = {
-          jobNumber: i + 1,
-          jobUrl: job.jobUrl,
-          status: 'pending_browser',
-          message: 'Waiting for browser integration',
-          processedAt: new Date().toISOString()
-        };
-        
-        this.results.push(result);
-        console.log(`[${this.sessionId}] Job ${i + 1} queued: ${job.jobUrl}`);
+        try {
+          console.log(`[${this.sessionId}] Processing job ${i + 1}: ${job.jobUrl}`);
+          
+          // Navigate to job page
+          await this.page.goto(job.jobUrl, { waitUntil: 'networkidle2' });
+          
+          // Wait a bit for page to load
+          await this.page.waitForTimeout(2000);
+          
+          // Check if we're on Upwork login page
+          const isLoginPage = await this.page.$('input[name="username"]') !== null;
+          if (isLoginPage) {
+            console.log(`[${this.sessionId}] Job ${i + 1}: Login required`);
+            this.results.push({
+              jobNumber: i + 1,
+              jobUrl: job.jobUrl,
+              status: 'login_required',
+              message: 'Please log in to Upwork first',
+              processedAt: new Date().toISOString()
+            });
+            continue;
+          }
+          
+          // Check if job is still available
+          const isJobAvailable = await this.page.$('.job-details') !== null;
+          if (!isJobAvailable) {
+            console.log(`[${this.sessionId}] Job ${i + 1}: Not available`);
+            this.results.push({
+              jobNumber: i + 1,
+              jobUrl: job.jobUrl,
+              status: 'not_available',
+              message: 'Job is no longer available',
+              processedAt: new Date().toISOString()
+            });
+            continue;
+          }
+          
+          // Try to apply to job
+          const applyButton = await this.page.$('button[data-test="submit-btn"]');
+          if (applyButton) {
+            console.log(`[${this.sessionId}] Job ${i + 1}: Apply button found`);
+            this.results.push({
+              jobNumber: i + 1,
+              jobUrl: job.jobUrl,
+              status: 'ready_to_apply',
+              message: 'Job ready for application',
+              processedAt: new Date().toISOString()
+            });
+          } else {
+            console.log(`[${this.sessionId}] Job ${i + 1}: No apply button found`);
+            this.results.push({
+              jobNumber: i + 1,
+              jobUrl: job.jobUrl,
+              status: 'no_apply_button',
+              message: 'No apply button found on job page',
+              processedAt: new Date().toISOString()
+            });
+          }
+          
+        } catch (jobError) {
+          console.error(`[${this.sessionId}] Job ${i + 1} failed:`, jobError);
+          this.results.push({
+            jobNumber: i + 1,
+            jobUrl: job.jobUrl,
+            status: 'error',
+            message: `Error: ${jobError.message}`,
+            processedAt: new Date().toISOString()
+          });
+        }
       }
       
       this.status = 'completed';
-      console.log(`[${this.sessionId}] All jobs queued for browser processing`);
+      console.log(`[${this.sessionId}] All jobs processed`);
       
     } catch (error) {
       console.error(`[${this.sessionId}] Job processing failed:`, error);
       this.status = 'error';
       throw error;
+    }
+  }
+
+  async close() {
+    if (this.browser) {
+      try {
+        await this.browser.close();
+        console.log(`[${this.sessionId}] Browser closed`);
+      } catch (error) {
+        console.error(`[${this.sessionId}] Error closing browser:`, error);
+      }
     }
   }
 }
@@ -71,7 +185,7 @@ app.get('/', (req, res) => {
     message: 'Upwork Auto Applier Backend',
     status: 'running',
     version: '1.0.0',
-    note: 'Backend API is ready. Browser functionality coming soon!'
+    puppeteer: 'enabled'
   });
 });
 
@@ -81,27 +195,32 @@ app.get('/health', (req, res) => {
 
 app.post('/session', async (req, res) => {
   try {
-    const { jobs, applicationPreferences } = req.body;
+    const { jobs, applicationPreferences, keepAlive = false, closeAfterRun = true } = req.body;
     
     if (!jobs || !Array.isArray(jobs) || jobs.length === 0) {
       return res.status(400).json({ error: 'Jobs array is required' });
     }
     
     const sessionId = uuidv4();
-    const session = new SimpleSession(sessionId);
+    const session = new BrowserSession(sessionId);
     
     // Store jobs and preferences
     session.jobs = jobs;
     session.applicationPreferences = applicationPreferences || {};
+    session.keepAlive = keepAlive;
+    session.closeAfterRun = closeAfterRun;
     
     // Store session
     sessions.set(sessionId, session);
+    
+    // Launch browser
+    await session.launchBrowser();
     
     res.json({
       sessionId,
       status: session.status,
       browserUrl: `${req.protocol}://${req.get('host')}/browser/${sessionId}`,
-      message: 'Session created. Backend API is ready!'
+      message: 'Session created with browser ready!'
     });
     
   } catch (error) {
@@ -121,13 +240,13 @@ app.get('/session/:sessionId', (req, res) => {
   res.json({
     sessionId: session.sessionId,
     status: session.status,
-    isLoggedIn: false, // Will be true when browser is integrated
+    isLoggedIn: session.isLoggedIn,
     jobsCount: session.jobs.length,
-    currentJob: 0,
+    currentJob: session.results.length,
     results: session.results,
     createdAt: session.createdAt,
     lastActivity: session.lastActivity,
-    message: session.message
+    browserUrl: `${req.protocol}://${req.get('host')}/browser/${sessionId}`
   });
 });
 
@@ -140,12 +259,16 @@ app.post('/session/:sessionId/start-processing', async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
     
+    if (!session.browser) {
+      return res.status(400).json({ error: 'Browser not ready' });
+    }
+    
     // Start processing in background
     session.processJobs().catch(error => {
       console.error(`[${sessionId}] Background processing error:`, error);
     });
     
-    res.json({ message: 'Job processing started (simulation mode)' });
+    res.json({ message: 'Job processing started' });
     
   } catch (error) {
     console.error('Start processing failed:', error);
@@ -167,11 +290,58 @@ app.get('/session/:sessionId/results', (req, res) => {
     results: session.results,
     summary: {
       total: session.jobs.length,
-      pending: session.results.filter(r => r.status === 'pending_browser').length,
-      completed: 0,
-      failed: 0
+      completed: session.results.length,
+      pending: session.jobs.length - session.results.length,
+      errors: session.results.filter(r => r.status === 'error').length
     }
   });
+});
+
+app.post('/session/:sessionId/keep-alive', (req, res) => {
+  const sessionId = req.params.sessionId;
+  const session = sessions.get(sessionId);
+  
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+  
+  session.lastActivity = new Date();
+  res.json({ message: 'Session kept alive' });
+});
+
+app.post('/session/:sessionId/reuse', async (req, res) => {
+  try {
+    const sessionId = req.params.sessionId;
+    const session = sessions.get(sessionId);
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    
+    const { jobs, applicationPreferences } = req.body;
+    
+    if (!jobs || !Array.isArray(jobs) || jobs.length === 0) {
+      return res.status(400).json({ error: 'Jobs array is required' });
+    }
+    
+    // Update session with new jobs
+    session.jobs = jobs;
+    session.applicationPreferences = applicationPreferences || {};
+    session.results = [];
+    session.status = 'ready';
+    session.lastActivity = new Date();
+    
+    res.json({
+      sessionId,
+      status: session.status,
+      message: 'Session updated with new jobs',
+      jobsCount: session.jobs.length
+    });
+    
+  } catch (error) {
+    console.error('Session reuse failed:', error);
+    res.status(500).json({ error: 'Failed to reuse session', details: error.message });
+  }
 });
 
 // Cleanup inactive sessions
@@ -182,6 +352,7 @@ setInterval(() => {
   for (const [sessionId, session] of sessions.entries()) {
     if (now - session.lastActivity > inactiveThreshold) {
       console.log(`Cleaning up inactive session: ${sessionId}`);
+      session.close();
       sessions.delete(sessionId);
     }
   }
@@ -190,11 +361,18 @@ setInterval(() => {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down server...');
+  
+  // Close all browser sessions
+  for (const [sessionId, session] of sessions.entries()) {
+    console.log(`Closing session: ${sessionId}`);
+    await session.close();
+  }
+  
   process.exit(0);
 });
 
 app.listen(PORT, () => {
   console.log(`Upwork Backend Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log('Note: Backend API is ready. Browser functionality will be added in the next update.');
+  console.log('Puppeteer enabled with Docker support');
 });

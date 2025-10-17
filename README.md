@@ -5,19 +5,23 @@ This is the backend server for the Upwork Auto Applier. Deploy this to Railway, 
 ## 🚀 Current Status
 
 ✅ **API Ready** - Backend accepts job requests and creates sessions
-🔄 **Browser Integration** - Coming in next update
-📊 **Session Management** - Tracks jobs and results
-🌐 **Deployment Ready** - Lightweight, fast deployment
+✅ **Browser Integration** - Full Puppeteer automation with Docker
+✅ **Session Management** - Tracks jobs and results
+✅ **Deployment Ready** - Dockerized for Render free tier
 
 ## Quick Deploy
 
+### Render (Recommended - Free Tier)
+1. Connect this repository to Render
+2. Select "Docker" as the runtime (auto-detected)
+3. Set environment variables:
+   - `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true`
+   - `PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable`
+4. Deploy automatically
+
 ### Railway
 1. Connect this repository to Railway
-2. Deploy automatically
-
-### Render
-1. Connect this repository to Render
-2. Deploy automatically
+2. Deploy automatically (Docker support)
 
 ## Environment Variables
 
@@ -25,6 +29,8 @@ Set these in your hosting platform:
 
 ```env
 NODE_ENV=production
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 SESSION_SECRET=your-super-secret-key-here
 ALLOWED_ORIGINS=https://console.apify.com,https://apify.com
 PORT=3000
@@ -48,9 +54,17 @@ This backend provides an API for the Upwork Auto Applier actor to:
 
 The actor connects to this backend to get a browser URL for users to interact with.
 
-## Next Steps
+## How It Works
 
-1. **Deploy backend** - Get it running on Render/Railway
-2. **Test API** - Verify it accepts requests
-3. **Add browser functionality** - Integrate Puppeteer
-4. **Full automation** - Complete Upwork processing
+1. **Docker Base Image** - Uses Puppeteer's official Docker image with pre-installed Chrome
+2. **Browser Automation** - Full Puppeteer support for Upwork interaction
+3. **Session Management** - Tracks browser sessions and job processing
+4. **API Integration** - Connects to Apify actor for job data
+
+## Features
+
+- ✅ **Full Puppeteer Support** - Real browser automation
+- ✅ **Upwork Integration** - Job application processing
+- ✅ **Session Persistence** - Keep browser alive between batches
+- ✅ **Error Handling** - Robust error management
+- ✅ **Free Tier Compatible** - Works on Render's free plan

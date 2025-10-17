@@ -10,22 +10,9 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// Middleware - Disable CSP temporarily to test
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrcAttr: ["'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'", "https:", "data:"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'self'"]
-    }
-  }
+  contentSecurityPolicy: false
 }));
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
@@ -196,8 +183,9 @@ app.get('/', (req, res) => {
   res.json({
     message: 'Upwork Auto Applier Backend',
     status: 'running',
-    version: '1.0.0',
-    puppeteer: 'enabled'
+    version: '1.0.1',
+    puppeteer: 'enabled',
+    csp: 'disabled'
   });
 });
 

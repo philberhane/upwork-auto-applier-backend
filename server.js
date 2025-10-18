@@ -45,7 +45,7 @@ class BrowserSession {
       console.log(`[${this.sessionId}] Launching browser...`);
       
       const launchOptions = {
-        headless: 'new', // Always headless on Railway
+        headless: false, // Show browser for user interaction
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -66,8 +66,14 @@ class BrowserSession {
       // Set viewport
       await this.page.setViewport({ width: 1280, height: 720 });
       
-      this.status = 'browser_ready';
-      console.log(`[${this.sessionId}] Browser launched successfully`);
+      // Navigate to Upwork for login
+      await this.page.goto('https://www.upwork.com', { waitUntil: 'networkidle2' });
+      
+      this.status = 'waiting_for_login';
+      console.log(`[${this.sessionId}] Browser launched and navigated to Upwork`);
+      
+      // Start monitoring for login
+      this.startLoginMonitoring();
       
       return true;
     } catch (error) {
@@ -75,6 +81,52 @@ class BrowserSession {
       this.status = 'error';
       throw error;
     }
+  }
+
+  startLoginMonitoring() {
+    // Check for login every 5 seconds
+    const checkInterval = setInterval(async () => {
+      try {
+        // Check if we're on Upwork and logged in
+        const currentUrl = this.page.url();
+        const isOnUpwork = currentUrl.includes('upwork.com');
+        
+        if (isOnUpwork) {
+          // Check for login indicators
+          const isLoggedIn = await this.page.evaluate(() => {
+            // Look for common login indicators
+            return document.querySelector('[data-test="user-menu"]') !== null ||
+                   document.querySelector('.user-menu') !== null ||
+                   document.querySelector('[data-cy="user-menu"]') !== null ||
+                   document.querySelector('.upwork-header-user') !== null ||
+                   window.location.href.includes('/nx/') ||
+                   document.querySelector('a[href*="/logout"]') !== null;
+          });
+          
+          if (isLoggedIn) {
+            console.log(`[${this.sessionId}] Login detected!`);
+            this.isLoggedIn = true;
+            this.status = 'logged_in';
+            clearInterval(checkInterval);
+            
+            // Start processing jobs
+            this.processJobs().catch(error => {
+              console.error(`[${this.sessionId}] Job processing failed:`, error);
+            });
+          }
+        }
+      } catch (error) {
+        console.log(`[${this.sessionId}] Login check error:`, error.message);
+      }
+    }, 5000);
+    
+    // Stop monitoring after 10 minutes
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      if (!this.isLoggedIn) {
+        console.log(`[${this.sessionId}] Login monitoring timeout`);
+      }
+    }, 600000); // 10 minutes
   }
 
   async processJobs() {
@@ -399,16 +451,17 @@ app.get('/browser/:sessionId', (req, res) => {
         
         <div class="browser-section">
           <h3>🌐 Interactive Browser</h3>
-          <p>Click the button below to open the browser window where you can log into Upwork and handle any challenges.</p>
-          <button class="browser-btn" id="open-browser-btn">Open Browser Window</button>
-          <div id="status-message" style="margin-top: 15px;"></div>
+          <p>The browser is automatically launched and navigated to Upwork. Please log in directly in the browser window.</p>
+          <div id="status-message" style="margin-top: 15px;">
+            <p style="color: #4CAF50;">✅ Browser is ready! Please log into Upwork in the browser window.</p>
+          </div>
         </div>
         
         <div class="instructions">
           <h3>📋 Instructions</h3>
           <ol>
-            <li>Click "Open Browser Window" above</li>
-            <li>Log into your Upwork account</li>
+            <li>Look for the browser window that opened automatically</li>
+            <li>Log into your Upwork account in that browser</li>
             <li>Handle any Cloudflare or security challenges</li>
             <li>Return to this page to monitor progress</li>
             <li>The system will automatically process your job applications</li>
@@ -431,55 +484,10 @@ app.get('/browser/:sessionId', (req, res) => {
         </div>
         
         <script>
-          // Wait for DOM to load
-          document.addEventListener('DOMContentLoaded', function() {
-            const openBrowserBtn = document.getElementById('open-browser-btn');
-            if (openBrowserBtn) {
-              openBrowserBtn.addEventListener('click', openBrowser);
-            }
-          });
-          
-          function openBrowser() {
-            // Open Upwork in a new tab
-            const upworkWindow = window.open('https://www.upwork.com', '_blank');
-            
-            if (upworkWindow) {
-              // Show success message
-              document.getElementById('status-message').innerHTML = 
-                '<p style="color: #4CAF50;">✅ Browser window opened! Please log into Upwork in the new tab.</p>';
-              
-              // Start monitoring for login
-              startLoginMonitoring();
-            } else {
-              // Show error if popup was blocked
-              document.getElementById('status-message').innerHTML = 
-                '<p style="color: #ff6b6b;">❌ Popup blocked! Please allow popups and try again.</p>';
-            }
-          }
-          
-          function startLoginMonitoring() {
-            // Check login status every 10 seconds
-            const checkInterval = setInterval(async () => {
-              try {
-                const sessionId = '${sessionId}';
-                const response = await fetch('/session/' + sessionId);
-                const data = await response.json();
-                
-                if (data.isLoggedIn) {
-                  document.getElementById('status-message').innerHTML = 
-                    '<p style="color: #4CAF50;">✅ Logged in! Processing jobs...</p>';
-                  clearInterval(checkInterval);
-                }
-              } catch (error) {
-                console.log('Checking login status...');
-              }
-            }, 10000);
-          }
-          
-          // Auto-refresh page every 30 seconds to show updated results
+          // Auto-refresh page every 10 seconds to show updated results
           setInterval(() => {
             location.reload();
-          }, 30000);
+          }, 10000);
         </script>
       </body>
     </html>

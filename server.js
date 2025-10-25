@@ -741,13 +741,28 @@ function handleExtensionMessage(sessionId, data) {
   
   switch (data.type) {
     case 'job_applied':
+    case 'job_completed':
       console.log(`Job application result for session ${sessionId}:`, data);
       // Update session with job result
       if (session.results) {
         const jobResult = {
           jobId: data.jobId,
           status: data.success ? 'applied' : 'failed',
-          message: data.success ? 'Successfully applied' : data.error,
+          message: data.success ? 'Successfully applied' : data.message || data.error,
+          processedAt: new Date().toISOString()
+        };
+        session.results.push(jobResult);
+      }
+      break;
+      
+    case 'job_failed':
+      console.log(`Job application failed for session ${sessionId}:`, data);
+      // Update session with job failure
+      if (session.results) {
+        const jobResult = {
+          jobId: data.jobId,
+          status: 'failed',
+          message: data.error || 'Job application failed',
           processedAt: new Date().toISOString()
         };
         session.results.push(jobResult);

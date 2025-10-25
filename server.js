@@ -72,6 +72,20 @@ class BrowserSession {
     }
   }
 
+  // Check if extension is connected
+  isExtensionConnected() {
+    return extensionConnections.has(this.sessionId);
+  }
+
+  // Update login status
+  setLoggedIn(loggedIn) {
+    this.isLoggedIn = loggedIn;
+    if (loggedIn) {
+      this.status = 'logged_in';
+      console.log(`[${this.sessionId}] User logged in via extension`);
+    }
+  }
+
   startLoginMonitoring() {
     // Check for login every 5 seconds
     const checkInterval = setInterval(async () => {
@@ -350,10 +364,14 @@ app.get('/session/:sessionId', (req, res) => {
     return res.status(404).json({ error: 'Session not found' });
   }
   
+  // Check if extension is connected
+  const extensionConnected = session.isExtensionConnected();
+  
   res.json({
     sessionId: session.sessionId,
     status: session.status,
     isLoggedIn: session.isLoggedIn,
+    extensionConnected: extensionConnected,
     jobsCount: session.jobs.length,
     currentJob: session.results.length,
     results: session.results,
@@ -690,14 +708,18 @@ function handleExtensionMessage(sessionId, data) {
       
     case 'login_status':
       console.log(`Login status for session ${sessionId}:`, data.isLoggedIn);
-      session.isLoggedIn = data.isLoggedIn;
+      session.setLoggedIn(data.isLoggedIn);
       if (data.isLoggedIn) {
-        session.status = 'logged_in';
         // Start processing jobs
         session.processJobs().catch(error => {
           console.error(`Job processing failed for session ${sessionId}:`, error);
         });
       }
+      break;
+      
+    case 'extension_connected':
+      console.log(`Extension connected for session ${sessionId}`);
+      session.status = 'extension_connected';
       break;
       
     default:

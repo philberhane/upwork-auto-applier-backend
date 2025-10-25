@@ -725,8 +725,12 @@ wss.on('connection', (ws, req) => {
 });
 
 function handleExtensionMessage(sessionId, data) {
+  console.log(`📨 Backend: Received message from extension:`, data);
   const session = sessions.get(sessionId);
-  if (!session) return;
+  if (!session) {
+    console.log(`❌ Backend: Session ${sessionId} not found for message:`, data);
+    return;
+  }
   
   switch (data.type) {
     case 'job_applied':
@@ -744,31 +748,43 @@ function handleExtensionMessage(sessionId, data) {
       break;
       
     case 'login_status':
-      console.log(`Login status for session ${sessionId}:`, data.isLoggedIn);
-      session.setLoggedIn(data.isLoggedIn);
-      if (data.isLoggedIn) {
-        // Start processing jobs
-        session.processJobs().catch(error => {
-          console.error(`Job processing failed for session ${sessionId}:`, error);
-        });
+      console.log(`🔐 Backend: Login status for session ${sessionId}:`, data.isLoggedIn);
+      try {
+        session.setLoggedIn(data.isLoggedIn);
+        console.log(`✅ Backend: Login status updated successfully`);
+        
+        if (data.isLoggedIn) {
+          console.log(`🚀 Backend: Starting job processing for session ${sessionId}`);
+          // Start processing jobs
+          session.processJobs().catch(error => {
+            console.error(`❌ Backend: Job processing failed for session ${sessionId}:`, error);
+          });
+        }
+      } catch (error) {
+        console.error(`❌ Backend: Error handling login status:`, error);
       }
       break;
       
     case 'extension_connected':
-      console.log(`Extension connected for session ${sessionId}`);
+      console.log(`🔌 Backend: Extension connected for session ${sessionId}`);
       session.status = 'extension_connected';
       break;
       
     default:
-      console.log(`Unknown message type from extension: ${data.type}`);
+      console.log(`❓ Backend: Unknown message type from extension: ${data.type}`);
   }
 }
 
 // Send message to extension
 function sendToExtension(sessionId, message) {
+  console.log(`📤 Backend: Attempting to send message to extension for session ${sessionId}:`, message);
   const ws = extensionConnections.get(sessionId);
   if (ws && ws.readyState === WebSocket.OPEN) {
+    console.log(`✅ Backend: WebSocket is open, sending message`);
     ws.send(JSON.stringify(message));
+    console.log(`📤 Backend: Message sent successfully`);
+  } else {
+    console.log(`❌ Backend: WebSocket not available or closed. State:`, ws ? ws.readyState : 'null');
   }
 }
 

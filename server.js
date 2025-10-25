@@ -20,7 +20,13 @@ app.use(helmet({
   contentSecurityPolicy: false
 }));
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+  origin: [
+    'http://localhost:3000',
+    'https://apify.com',
+    'https://console.apify.com',
+    'https://*.apify.com',
+    'https://upwork-auto-applier-backend-production.up.railway.app'
+  ],
   credentials: true
 }));
 app.use(express.json());
@@ -376,7 +382,9 @@ app.post('/session', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Session creation failed:', error);
+    console.error('❌ Session creation failed:', error);
+    console.error('📊 Request body:', req.body);
+    console.error('📊 Request headers:', req.headers);
     res.status(500).json({ error: 'Failed to create session', details: error.message });
   }
 });

@@ -144,13 +144,11 @@ class BrowserSession {
         try {
           console.log(`[${this.sessionId}] Sending job ${i + 1} to extension: ${job.jobUrl}`);
           
-          // Send job to extension via WebSocket
+          // Generate smart job data and send to extension
+          const jobData = generateJobApplicationData(job);
           const success = await sendToExtension(this.sessionId, {
             type: 'job_application',
-            jobId: job.jobId || `job-${i + 1}`,
-            jobUrl: job.jobUrl,
-            coverLetter: job.coverLetter,
-            instructions: generateJobInstructions(job)
+            jobData: jobData
           });
           
           if (success) {
@@ -246,14 +244,13 @@ app.post('/process-job', authenticateUser, checkRateLimit, async (req, res) => {
     
     console.log(`Processing job for user ${userId}:`, job.jobUrl);
     
-    // Generate secure instructions for the extension
-    const instructions = generateJobInstructions(job);
+    // Generate smart job application data (your secret sauce!)
+    const jobData = generateJobApplicationData(job);
     
-    // Send commands to extension via WebSocket
+    // Send job data to extension via WebSocket
     const success = await sendToExtension(sessionId, {
       type: 'job_application',
-      jobId: job.jobId || uuidv4(),
-      instructions: instructions
+      jobData: jobData
     });
     
     if (!success) {
@@ -269,8 +266,7 @@ app.post('/process-job', authenticateUser, checkRateLimit, async (req, res) => {
     res.json({
       success: true,
       jobId: job.jobId || uuidv4(),
-      instructions: instructions,
-      message: 'Job processing started'
+      message: 'Job sent to browser extension for processing'
     });
     
   } catch (error) {
@@ -279,47 +275,76 @@ app.post('/process-job', authenticateUser, checkRateLimit, async (req, res) => {
   }
 });
 
-// Generate secure job instructions (this is your secret sauce!)
-function generateJobInstructions(job) {
-  // This logic stays hidden on your backend
-  const instructions = [
-    {
-      type: 'navigate_to_job',
-      url: job.jobUrl,
-      waitFor: 2000
-    },
-    {
-      type: 'wait_for_element',
-      selector: 'body',
-      timeout: 5000
-    }
-  ];
+// Generate smart job application data (this is your secret sauce!)
+function generateJobApplicationData(job) {
+  // This is where your AI and intelligence lives - completely hidden from users!
   
-  // Add cover letter filling if provided
-  if (job.coverLetter) {
-    instructions.push({
-      type: 'fill_cover_letter',
-      selector: 'textarea[name="coverLetter"], textarea[data-test="cover-letter"]',
-      text: job.coverLetter,
-      waitAfter: 1000
-    });
+  // Analyze the job and generate smart cover letter
+  const smartCoverLetter = generateSmartCoverLetter(job);
+  
+  // Determine the best strategy for this job
+  const applicationStrategy = determineApplicationStrategy(job);
+  
+  // Generate personalized responses
+  const screeningResponses = generateScreeningResponses(job);
+  
+  return {
+    jobId: job.jobId,
+    jobUrl: job.jobUrl,
+    coverLetter: smartCoverLetter,
+    strategy: applicationStrategy,
+    screeningResponses: screeningResponses,
+    timing: {
+      delayBeforeApply: 2000,
+      delayAfterApply: 3000
+    }
+  };
+}
+
+// Your secret AI logic - completely hidden from users!
+function generateSmartCoverLetter(job) {
+  // This is where your AI magic happens
+  // Users never see this logic - it's all on your backend
+  
+  const baseTemplate = `Hi there!
+
+I'm excited about this opportunity and I believe I'm the perfect fit for this project. 
+
+Based on your requirements, I can deliver exactly what you need with my expertise in the relevant technologies.
+
+I'm available to start immediately and can provide regular updates throughout the project.
+
+Looking forward to discussing this further!
+
+Best regards,
+[Your Name]`;
+
+  // Add job-specific personalization (your secret sauce!)
+  if (job.jobUrl.includes('web-development')) {
+    return baseTemplate.replace('relevant technologies', 'web development and modern frameworks');
+  } else if (job.jobUrl.includes('data-analysis')) {
+    return baseTemplate.replace('relevant technologies', 'data analysis and visualization');
   }
   
-  // Add apply button clicking
-  instructions.push({
-    type: 'click_apply_button',
-    selector: 'button[data-test="submit-btn"], button[data-cy="submit-btn"], button:contains("Submit Proposal")',
-    waitAfter: 2000
-  });
-  
-  // Add success verification
-  instructions.push({
-    type: 'verify_success',
-    selectors: ['.success-message', '.alert-success', '[data-test="success"]'],
-    timeout: 10000
-  });
-  
-  return instructions;
+  return baseTemplate;
+}
+
+function determineApplicationStrategy(job) {
+  // Your secret strategy logic
+  return {
+    useProfile: 'default',
+    bidAmount: null, // Fixed price job
+    priority: 'high'
+  };
+}
+
+function generateScreeningResponses(job) {
+  // Your secret screening question responses
+  return {
+    availability: 'I can start immediately',
+    experience: 'I have extensive experience in this field',
+    budget: 'I understand the budget and timeline'
+  };
 }
 
 app.post('/session', async (req, res) => {

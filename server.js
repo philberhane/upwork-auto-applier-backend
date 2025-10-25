@@ -689,7 +689,19 @@ wss.on('connection', (ws, req) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const sessionId = url.pathname.split('/')[2]; // /ws/sessionId
   
-  console.log(`Extension connected for session: ${sessionId}`);
+  console.log(`🔌 WebSocket connection attempt for session: ${sessionId}`);
+  console.log(`📊 Total sessions in memory: ${sessions.size}`);
+  console.log(`📋 Available sessions:`, Array.from(sessions.keys()));
+  
+  // Check if session exists
+  const session = sessions.get(sessionId);
+  if (!session) {
+    console.log(`❌ Session ${sessionId} not found, rejecting connection`);
+    ws.close(1000, 'Session not found');
+    return;
+  }
+  
+  console.log(`✅ Extension connected for session: ${sessionId}`);
   extensionConnections.set(sessionId, ws);
   
   ws.on('message', (message) => {

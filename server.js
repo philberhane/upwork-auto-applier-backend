@@ -243,12 +243,11 @@ app.get('/health', (req, res) => {
 });
 
 // Secure job processing endpoint
-app.post('/process-job', authenticateUser, checkRateLimit, async (req, res) => {
+app.post('/process-job', async (req, res) => {
   try {
     const { job, sessionId } = req.body;
-    const userId = req.user.id;
     
-    console.log(`Processing job for user ${userId}:`, job.jobUrl);
+    console.log(`Processing job for session ${sessionId}:`, job.jobUrl);
     
     // Generate smart job application data (your secret sauce!)
     const jobData = generateJobApplicationData(job);

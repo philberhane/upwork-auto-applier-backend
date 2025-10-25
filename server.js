@@ -12,7 +12,7 @@ const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
-// WebSocket server
+// WebSocket server for browser extension communication
 const wss = new WebSocket.Server({ server });
 
 // Middleware - Disable CSP temporarily to test

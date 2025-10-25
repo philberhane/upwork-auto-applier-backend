@@ -3,7 +3,7 @@ const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
 const helmet = require('helmet');
-const puppeteer = require('puppeteer');
+// const puppeteer = require('puppeteer-core');
 const path = require('path');
 const http = require('http');
 require('dotenv').config();
@@ -57,38 +57,12 @@ class BrowserSession {
 
   async launchBrowser() {
     try {
-      console.log(`[${this.sessionId}] Launching browser...`);
+      console.log(`[${this.sessionId}] Browser launch requested - Extension mode`);
       
-      const launchOptions = {
-        headless: false, // Show browser for user interaction
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process',
-          '--disable-gpu',
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor'
-        ]
-      };
-
-      this.browser = await puppeteer.launch(launchOptions);
-      this.page = await this.browser.newPage();
-      
-      // Set viewport
-      await this.page.setViewport({ width: 1280, height: 720 });
-      
-      // Navigate to Upwork for login
-      await this.page.goto('https://www.upwork.com', { waitUntil: 'networkidle2' });
-      
-      this.status = 'waiting_for_login';
-      console.log(`[${this.sessionId}] Browser launched and navigated to Upwork`);
-      
-      // Start monitoring for login
-      this.startLoginMonitoring();
+      // In extension mode, we don't launch a browser
+      // The user will use their own browser with the extension
+      this.status = 'waiting_for_extension';
+      console.log(`[${this.sessionId}] Waiting for browser extension connection`);
       
       return true;
     } catch (error) {
@@ -146,67 +120,39 @@ class BrowserSession {
 
   async processJobs() {
     try {
-      console.log(`[${this.sessionId}] Processing ${this.jobs.length} jobs...`);
+      console.log(`[${this.sessionId}] Processing ${this.jobs.length} jobs via extension...`);
       this.status = 'processing';
       
+      // Send jobs to extension for processing
       for (let i = 0; i < this.jobs.length; i++) {
         const job = this.jobs[i];
         
         try {
-          console.log(`[${this.sessionId}] Processing job ${i + 1}: ${job.jobUrl}`);
+          console.log(`[${this.sessionId}] Sending job ${i + 1} to extension: ${job.jobUrl}`);
           
-          // Navigate to job page
-          await this.page.goto(job.jobUrl, { waitUntil: 'networkidle2' });
+          // Send job to extension via WebSocket
+          const success = await sendToExtension(this.sessionId, {
+            type: 'job_application',
+            jobId: job.jobId || `job-${i + 1}`,
+            jobUrl: job.jobUrl,
+            coverLetter: job.coverLetter,
+            instructions: generateJobInstructions(job)
+          });
           
-          // Wait a bit for page to load
-          await this.page.waitForTimeout(2000);
-          
-          // Check if we're on Upwork login page
-          const isLoginPage = await this.page.$('input[name="username"]') !== null;
-          if (isLoginPage) {
-            console.log(`[${this.sessionId}] Job ${i + 1}: Login required`);
+          if (success) {
             this.results.push({
               jobNumber: i + 1,
               jobUrl: job.jobUrl,
-              status: 'login_required',
-              message: 'Please log in to Upwork first',
-              processedAt: new Date().toISOString()
-            });
-            continue;
-          }
-          
-          // Check if job is still available
-          const isJobAvailable = await this.page.$('.job-details') !== null;
-          if (!isJobAvailable) {
-            console.log(`[${this.sessionId}] Job ${i + 1}: Not available`);
-            this.results.push({
-              jobNumber: i + 1,
-              jobUrl: job.jobUrl,
-              status: 'not_available',
-              message: 'Job is no longer available',
-              processedAt: new Date().toISOString()
-            });
-            continue;
-          }
-          
-          // Try to apply to job
-          const applyButton = await this.page.$('button[data-test="submit-btn"]');
-          if (applyButton) {
-            console.log(`[${this.sessionId}] Job ${i + 1}: Apply button found`);
-            this.results.push({
-              jobNumber: i + 1,
-              jobUrl: job.jobUrl,
-              status: 'ready_to_apply',
-              message: 'Job ready for application',
+              status: 'sent_to_extension',
+              message: 'Job sent to browser extension for processing',
               processedAt: new Date().toISOString()
             });
           } else {
-            console.log(`[${this.sessionId}] Job ${i + 1}: No apply button found`);
             this.results.push({
               jobNumber: i + 1,
               jobUrl: job.jobUrl,
-              status: 'no_apply_button',
-              message: 'No apply button found on job page',
+              status: 'extension_not_connected',
+              message: 'Browser extension not connected',
               processedAt: new Date().toISOString()
             });
           }
@@ -224,7 +170,7 @@ class BrowserSession {
       }
       
       this.status = 'completed';
-      console.log(`[${this.sessionId}] All jobs processed`);
+      console.log(`[${this.sessionId}] All jobs sent to extension`);
       
     } catch (error) {
       console.error(`[${this.sessionId}] Job processing failed:`, error);
@@ -234,14 +180,8 @@ class BrowserSession {
   }
 
   async close() {
-    if (this.browser) {
-      try {
-        await this.browser.close();
-        console.log(`[${this.sessionId}] Browser closed`);
-      } catch (error) {
-        console.error(`[${this.sessionId}] Error closing browser:`, error);
-      }
-    }
+    // In extension mode, no browser to close
+    console.log(`[${this.sessionId}] Session closed`);
   }
 }
 

@@ -5,10 +5,15 @@ const cors = require('cors');
 const helmet = require('helmet');
 const puppeteer = require('puppeteer');
 const path = require('path');
+const http = require('http');
 require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
+
+// WebSocket server
+const wss = new WebSocket.Server({ server });
 
 // Middleware - Disable CSP temporarily to test
 app.use(helmet({
@@ -23,6 +28,16 @@ app.use(express.static('public'));
 
 // Store active sessions
 const sessions = new Map();
+const extensionConnections = new Map(); // sessionId -> WebSocket connection
+const userApiKeys = new Map(); // apiKey -> userInfo
+const userUsage = new Map(); // userId -> usage stats
+
+// Mock user data (in production, use a database)
+const mockUsers = {
+  'free-user-123': { plan: 'free', jobsUsed: 0, jobsLimit: -1 }, // unlimited
+  'pro-user-456': { plan: 'pro', jobsUsed: 0, jobsLimit: -1 }, // unlimited
+  'business-user-789': { plan: 'business', jobsUsed: 0, jobsLimit: -1 } // unlimited
+};
 
 // Browser session management
 class BrowserSession {
@@ -230,13 +245,37 @@ class BrowserSession {
   }
 }
 
+// Authentication middleware
+function authenticateUser(req, res, next) {
+  const apiKey = req.headers.authorization?.replace('Bearer ', '');
+  
+  if (!apiKey) {
+    return res.status(401).json({ error: 'API key required' });
+  }
+  
+  // Check if API key is valid (in production, use database)
+  const userId = Object.keys(mockUsers).find(id => id === apiKey);
+  if (!userId) {
+    return res.status(401).json({ error: 'Invalid API key' });
+  }
+  
+  req.user = { id: userId, ...mockUsers[userId] };
+  next();
+}
+
+// Rate limiting middleware (disabled - unlimited usage)
+function checkRateLimit(req, res, next) {
+  // No rate limiting - unlimited usage for all users
+  next();
+}
+
 // API Routes
 app.get('/', (req, res) => {
   res.json({
     message: 'Upwork Auto Applier Backend',
     status: 'running',
-    version: '1.0.1',
-    puppeteer: 'enabled',
+    version: '1.0.2',
+    features: ['api_auth', 'unlimited_usage', 'command_based'],
     csp: 'disabled'
   });
 });
@@ -244,6 +283,90 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
+
+// Secure job processing endpoint
+app.post('/process-job', authenticateUser, checkRateLimit, async (req, res) => {
+  try {
+    const { job, sessionId } = req.body;
+    const userId = req.user.id;
+    
+    console.log(`Processing job for user ${userId}:`, job.jobUrl);
+    
+    // Generate secure instructions for the extension
+    const instructions = generateJobInstructions(job);
+    
+    // Send commands to extension via WebSocket
+    const success = await sendToExtension(sessionId, {
+      type: 'job_application',
+      jobId: job.jobId || uuidv4(),
+      instructions: instructions
+    });
+    
+    if (!success) {
+      return res.status(503).json({ 
+        error: 'Extension not connected', 
+        message: 'Please ensure the browser extension is installed and connected' 
+      });
+    }
+    
+    // Update usage stats
+    mockUsers[userId].jobsUsed++;
+    
+    res.json({
+      success: true,
+      jobId: job.jobId || uuidv4(),
+      instructions: instructions,
+      message: 'Job processing started'
+    });
+    
+  } catch (error) {
+    console.error('Job processing failed:', error);
+    res.status(500).json({ error: 'Job processing failed', details: error.message });
+  }
+});
+
+// Generate secure job instructions (this is your secret sauce!)
+function generateJobInstructions(job) {
+  // This logic stays hidden on your backend
+  const instructions = [
+    {
+      type: 'navigate_to_job',
+      url: job.jobUrl,
+      waitFor: 2000
+    },
+    {
+      type: 'wait_for_element',
+      selector: 'body',
+      timeout: 5000
+    }
+  ];
+  
+  // Add cover letter filling if provided
+  if (job.coverLetter) {
+    instructions.push({
+      type: 'fill_cover_letter',
+      selector: 'textarea[name="coverLetter"], textarea[data-test="cover-letter"]',
+      text: job.coverLetter,
+      waitAfter: 1000
+    });
+  }
+  
+  // Add apply button clicking
+  instructions.push({
+    type: 'click_apply_button',
+    selector: 'button[data-test="submit-btn"], button[data-cy="submit-btn"], button:contains("Submit Proposal")',
+    waitAfter: 2000
+  });
+  
+  // Add success verification
+  instructions.push({
+    type: 'verify_success',
+    selectors: ['.success-message', '.alert-success', '[data-test="success"]'],
+    timeout: 10000
+  });
+  
+  return instructions;
+}
 
 app.post('/session', async (req, res) => {
   try {
@@ -265,14 +388,12 @@ app.post('/session', async (req, res) => {
     // Store session
     sessions.set(sessionId, session);
     
-    // Launch browser
-    await session.launchBrowser();
-    
     res.json({
       sessionId,
       status: session.status,
       browserUrl: `${req.protocol}://${req.get('host')}/browser/${sessionId}`,
-      message: 'Session created with browser ready!'
+      websocketUrl: `wss://${req.get('host')}/ws/${sessionId}`,
+      message: 'Session created! Install browser extension to continue.'
     });
     
   } catch (error) {
@@ -450,18 +571,30 @@ app.get('/browser/:sessionId', (req, res) => {
         </div>
         
         <div class="browser-section">
-          <h3>🌐 Interactive Browser</h3>
-          <p>The browser is automatically launched and navigated to Upwork. Please log in directly in the browser window.</p>
+          <h3>🌐 Browser Extension Required</h3>
+          <p>To use this service, you need to install the Upwork Auto Applier browser extension.</p>
           <div id="status-message" style="margin-top: 15px;">
-            <p style="color: #4CAF50;">✅ Browser is ready! Please log into Upwork in the browser window.</p>
+            <p style="color: #FF9800;">⚠️ Please install the browser extension to continue.</p>
+          </div>
+          <div style="margin-top: 15px;">
+            <a href="#" id="install-extension" style="
+              background: #4CAF50;
+              color: white;
+              padding: 12px 24px;
+              border-radius: 6px;
+              text-decoration: none;
+              display: inline-block;
+              font-weight: bold;
+            ">Install Extension</a>
           </div>
         </div>
         
         <div class="instructions">
           <h3>📋 Instructions</h3>
           <ol>
-            <li>Look for the browser window that opened automatically</li>
-            <li>Log into your Upwork account in that browser</li>
+            <li>Install the Upwork Auto Applier browser extension</li>
+            <li>Click "Connect to Service" in the extension popup</li>
+            <li>Log into your Upwork account in this browser</li>
             <li>Handle any Cloudflare or security challenges</li>
             <li>Return to this page to monitor progress</li>
             <li>The system will automatically process your job applications</li>
@@ -568,9 +701,81 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-app.listen(PORT, () => {
+// WebSocket connection handling
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const sessionId = url.pathname.split('/')[2]; // /ws/sessionId
+  
+  console.log(`Extension connected for session: ${sessionId}`);
+  extensionConnections.set(sessionId, ws);
+  
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message);
+      handleExtensionMessage(sessionId, data);
+    } catch (error) {
+      console.error('Invalid WebSocket message:', error);
+    }
+  });
+  
+  ws.on('close', () => {
+    console.log(`Extension disconnected for session: ${sessionId}`);
+    extensionConnections.delete(sessionId);
+  });
+  
+  ws.on('error', (error) => {
+    console.error(`WebSocket error for session ${sessionId}:`, error);
+    extensionConnections.delete(sessionId);
+  });
+});
+
+function handleExtensionMessage(sessionId, data) {
+  const session = sessions.get(sessionId);
+  if (!session) return;
+  
+  switch (data.type) {
+    case 'job_applied':
+      console.log(`Job application result for session ${sessionId}:`, data);
+      // Update session with job result
+      if (session.results) {
+        const jobResult = {
+          jobId: data.jobId,
+          status: data.success ? 'applied' : 'failed',
+          message: data.success ? 'Successfully applied' : data.error,
+          processedAt: new Date().toISOString()
+        };
+        session.results.push(jobResult);
+      }
+      break;
+      
+    case 'login_status':
+      console.log(`Login status for session ${sessionId}:`, data.isLoggedIn);
+      session.isLoggedIn = data.isLoggedIn;
+      if (data.isLoggedIn) {
+        session.status = 'logged_in';
+        // Start processing jobs
+        session.processJobs().catch(error => {
+          console.error(`Job processing failed for session ${sessionId}:`, error);
+        });
+      }
+      break;
+      
+    default:
+      console.log(`Unknown message type from extension: ${data.type}`);
+  }
+}
+
+// Send message to extension
+function sendToExtension(sessionId, message) {
+  const ws = extensionConnections.get(sessionId);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(message));
+  }
+}
+
+server.listen(PORT, () => {
   console.log(`Upwork Backend Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('Puppeteer enabled with Railway Pro support');
-  console.log('CSP updated to allow inline scripts');
+  console.log('WebSocket server enabled for browser extension');
 });
